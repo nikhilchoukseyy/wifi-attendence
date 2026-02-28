@@ -7,8 +7,7 @@ import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { calculatePercentage, formatDate } from '../../lib/utils';
 import { AttendanceSummary, Teacher } from '../../types';
-import RNHTMLtoPDF from 'react-native-html-to-pdf';
-import * as FileSystem from 'expo-file-system';
+import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
 export default function DownloadPDFScreen() {
@@ -125,19 +124,10 @@ export default function DownloadPDFScreen() {
       });
 
       // Create PDF
-      const options = {
-        html: htmlContent,
-        fileName: `attendance_${teacher.subject}_${fromDateStr}_to_${toDateStr}`,
-        directory: FileSystem.DocumentDirectoryPath,
-        padding: 10,
-        width: 595,
-        height: 842,
-      };
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
 
-      const { filePath } = await RNHTMLtoPDF.convert(options);
-
-      if (filePath) {
-        await Sharing.shareAsync(filePath);
+      if (uri) {
+        await Sharing.shareAsync(uri);
         setSuccess('PDF generated and sharing dialog opened');
       }
     } catch (err: any) {
