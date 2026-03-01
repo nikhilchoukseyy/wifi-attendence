@@ -1,3 +1,4 @@
+import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PaperProvider } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,7 +10,7 @@ export default function App() {
       <SafeAreaProvider>
         <PaperProvider>
           <StatusBar barStyle="dark-content" />
-          {/* Expo Router handles routing via app.json plugin */}
+          <Slot />
         </PaperProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

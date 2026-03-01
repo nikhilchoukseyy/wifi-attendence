@@ -1,5 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
+import { PaperProvider } from 'react-native-paper';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../store/authStore';
 import { NetworkOfflineBanner } from '../components/NetworkOfflineBanner';
 
@@ -7,35 +11,35 @@ export default function RootLayout() {
   const { user } = useAuthStore();
   const router = useRouter();
   const segments = useSegments();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return; // ← wait until Slot is rendered
+
     const inAuthGroup = segments[0] === '(auth)';
-    const inStudentGroup = segments[0] === '(student)';
-    const inTeacherGroup = segments[0] === '(teacher)';
-    const inHodGroup = segments[0] === '(hod)';
 
     if (!user && !inAuthGroup) {
-      // No user, redirect to role selector
       router.replace('/');
-    } else if (user) {
-      // User exists, redirect to appropriate role screen
-      if (inAuthGroup) {
-        // Already authenticated, don't need to be on auth screens
-        if (user.role === 'student') {
-          router.replace('/(student)/mark-attendance');
-        } else if (user.role === 'teacher') {
-          router.replace('/(teacher)/session');
-        } else if (user.role === 'hod') {
-          router.replace('/(hod)/dashboard');
-        }
-      }
+    } else if (user && inAuthGroup) {
+      if (user.role === 'student') router.replace('/(student)/mark-attendance');
+      else if (user.role === 'teacher') router.replace('/(teacher)/session');
+      else if (user.role === 'hod') router.replace('/(hod)/dashboard');
     }
-  }, [user, segments]);
+  }, [user, segments, mounted]);
 
   return (
-    <>
-      <NetworkOfflineBanner />
-      <Slot />
-    </>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <PaperProvider>
+          <StatusBar style="dark" />
+          <NetworkOfflineBanner />
+          <Slot />
+        </PaperProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

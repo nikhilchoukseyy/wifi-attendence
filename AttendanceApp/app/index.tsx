@@ -19,27 +19,27 @@ export default function RoleSelector() {
         <View style={styles.buttonContainer}>
           <Button
             mode="contained"
-            size="large"
             onPress={() => router.push('/(auth)/student-login')}
             style={styles.button}
+            contentStyle={styles.buttonContent}
           >
             I am a Student
           </Button>
 
           <Button
             mode="contained"
-            size="large"
             onPress={() => router.push('/(auth)/teacher-login')}
             style={styles.button}
+            contentStyle={styles.buttonContent}
           >
             I am a Teacher
           </Button>
 
           <Button
             mode="contained"
-            size="large"
             onPress={() => router.push('/(auth)/hod-login')}
             style={styles.button}
+            contentStyle={styles.buttonContent}
           >
             I am a HOD
           </Button>
@@ -76,6 +76,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   button: {
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  buttonContent: {
     paddingVertical: 8,
   },
 });
