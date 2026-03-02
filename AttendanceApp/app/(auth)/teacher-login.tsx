@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { Teacher } from '../../types';
-import bcrypt from 'bcryptjs';
+import * as Crypto from 'expo-crypto';
 
 export default function TeacherLogin() {
   const router = useRouter();
@@ -42,8 +42,11 @@ export default function TeacherLogin() {
       const teacher = teachers[0] as Teacher & { password_hash: string };
 
       // Verify password
-      const passwordMatch = await bcrypt.compare(password, teacher.password_hash);
-      if (!passwordMatch) {
+      const passwordMatch= await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        password
+      );
+      if (passwordMatch !== teacher.password_hash) {
         throw new Error('Invalid password');
       }
 

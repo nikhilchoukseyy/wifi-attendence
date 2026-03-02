@@ -5,7 +5,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { Teacher } from '../../types';
-import bcrypt from 'bcryptjs';
+import * as Crypto from 'expo-crypto';
 
 export default function ManageTeachersScreen() {
   const { user } = useAuthStore();
@@ -53,7 +53,10 @@ export default function ManageTeachersScreen() {
     setLoading(true);
     try {
       // Hash password
-      const password_hash = await bcrypt.hash(password, 10);
+      const password_hash = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        password
+      );
 
       const { data, error: err } = await supabase
         .from('teacher')

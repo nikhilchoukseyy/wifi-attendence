@@ -24,7 +24,7 @@ export default function HODLogin() {
     setError('');
 
     try {
-      // Sign in with Supabase Auth
+      
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -42,10 +42,11 @@ export default function HODLogin() {
       const { data: hodProfile, error: hodError } = await supabase
         .from('hod')
         .select('*')
-        .eq('email', email)
+        .eq('id', data.user.id)
         .single();
 
       if (hodError) {
+        console.error('Error fetching HOD profile:', hodError);
         throw new Error('HOD profile not found');
       }
 
