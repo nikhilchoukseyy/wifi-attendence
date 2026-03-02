@@ -27,7 +27,7 @@ export default function HODLayout() {
           } else if (route.name === 'manage-teachers') {
             iconName = 'school';
           } else if (route.name === 'download-pdf') {
-            iconName = 'file-pdf';
+            iconName = 'file-pdf-box';
           }
 
           return (

@@ -38,6 +38,7 @@ export interface AttendanceSession {
   closed_at: string | null;
   session_pin: string;
   is_active: boolean;
+  router_subnet: string;
 }
 
 export interface AttendanceRecord {

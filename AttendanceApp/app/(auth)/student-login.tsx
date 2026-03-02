@@ -51,7 +51,28 @@ export default function StudentLogin() {
       // Get device ID for binding
       const deviceId = Device.osBuildId ?? Device.modelId ?? 'unknown';
 
-      // Device binding check
+      // Check if this device is already bound to ANY student
+      const { data: deviceUsers, error: deviceCheckError } = await supabase
+        .from('student')
+        .select('id, name')
+        .eq('device_id', deviceId)
+        .eq('is_device_bound', true);
+
+      if (deviceCheckError) {
+        throw deviceCheckError;
+      }
+
+      // If device is already bound to a different student, reject
+      if (deviceUsers && deviceUsers.length > 0) {
+        const boundStudentId = deviceUsers[0].id;
+        if (boundStudentId !== student.id) {
+          throw new Error(
+            'This device is already linked to another student account. Please use a different device.'
+          );
+        }
+      }
+
+      // Device binding check - if this student is bound, verify it's the same device
       if (student.is_device_bound && student.device_id !== deviceId) {
         throw new Error(
           'This account is already linked to another device. Contact your HOD.'
