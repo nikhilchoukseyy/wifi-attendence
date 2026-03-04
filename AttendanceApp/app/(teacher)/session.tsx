@@ -1,20 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, FlatList } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import {
-  Button,
-  Text,
-  ActivityIndicator,
-  Snackbar,
-  Card,
-  Divider,
-  Chip,
+  Button, Text, ActivityIndicator, Snackbar,
+  Card, Divider, Chip,
 } from 'react-native-paper';
 import * as Network from 'expo-network';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { useSessionStore } from '../../store/sessionStore';
-import { generatePIN, extractSubnet } from '../../lib/utils';
-import { AttendanceSession, Student, AttendanceRecord } from '../../types';
+import { generatePIN, extractSubnet, getWifiInfo } from '../../lib/utils';
+import { AttendanceSession, Student } from '../../types';
+import { syncPendingRecords, getPendingCount } from '../../lib/offlineSync';
 
 export default function SessionScreen() {
   const { user } = useAuthStore();
@@ -28,47 +24,50 @@ export default function SessionScreen() {
   const [presentCount, setPresentCount] = useState(0);
   const [studentCount, setStudentCount] = useState(0);
   const [presentStudents, setPresentStudents] = useState<Student[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // ── CHANGE 1: Pending count polling ──────────────────────────────────────
+  // Pehle yeh nahi tha. Kyun chahiye: teacher ko pata chale ki kitne
+  // students ke records abhi AsyncStorage mein hain — sync nahi hue.
+  // Har 5 second pe refresh hota hai jab session active ho.
+  useEffect(() => {
+    if (!activeSession) return;
+    getPendingCount().then(setPendingCount);
+    const interval = setInterval(() => {
+      getPendingCount().then(setPendingCount);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [activeSession]);
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (activeSession) {
       fetchPresentStudents();
-      // Subscribe to realtime updates
       const subscription = supabase
         .channel(`session-${activeSession.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'attendance_record',
-            filter: `session_id=eq.${activeSession.id}`,
-          },
-          (payload) => {
-            fetchPresentStudents();
-          }
-        )
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'attendance_record',
+          filter: `session_id=eq.${activeSession.id}`,
+        }, () => { fetchPresentStudents(); })
         .subscribe();
-
-      return () => {
-        subscription.unsubscribe();
-      };
+      return () => { subscription.unsubscribe(); };
     }
   }, [activeSession]);
 
   const fetchPresentStudents = async () => {
     if (!activeSession) return;
-
     try {
       const { data: records, error: recordError } = await supabase
         .from('attendance_record')
         .select('student_id, status')
         .eq('session_id', activeSession.id)
         .eq('status', 'present');
-
       if (recordError) throw recordError;
 
       const studentIds = records?.map((r) => r.student_id) || [];
-
       if (studentIds.length === 0) {
         setPresentStudents([]);
         setPresentCount(0);
@@ -76,12 +75,8 @@ export default function SessionScreen() {
       }
 
       const { data: students, error: studentError } = await supabase
-        .from('student')
-        .select('*')
-        .in('id', studentIds);
-
+        .from('student').select('*').in('id', studentIds);
       if (studentError) throw studentError;
-
       setPresentStudents(students || []);
       setPresentCount(students?.length || 0);
     } catch (err: any) {
@@ -89,31 +84,28 @@ export default function SessionScreen() {
     }
   };
 
+  // handleOpenSession — already had bssid + expires_at, unchanged
   const handleOpenSession = async () => {
     setLoading(true);
     setError('');
-
     try {
-      // Get network info
-      const ipAddress = await Network.getIpAddressAsync();
-      const subnet = extractSubnet(ipAddress);
+      const { subnet, bssid } = await getWifiInfo();
       const pin = generatePIN();
 
-      // Create attendance session
       const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_session')
-        .insert([
-          {
-            teacher_id: teacherId,
-            subject: teacher.subject,
-            year: teacher.year,
-            opened_at: new Date().toISOString(),
-            router_subnet: subnet,
-            session_pin: pin,
-            is_active: true,
-            date: new Date().toISOString().split('T')[0],
-          },
-        ])
+        .insert([{
+          teacher_id: teacherId,
+          subject: teacher.subject,
+          year: teacher.year,
+          opened_at: new Date().toISOString(),
+          router_subnet: subnet,
+          session_pin: pin,
+          is_active: true,
+          date: new Date().toISOString().split('T')[0],
+          session_bssid: bssid,
+          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        }])
         .select();
 
       if (sessionError) throw sessionError;
@@ -121,15 +113,10 @@ export default function SessionScreen() {
       if (sessionData && sessionData.length > 0) {
         const session = sessionData[0] as AttendanceSession;
 
-        // Get all students for this year
         const { data: students, error: studentError } = await supabase
-          .from('student')
-          .select('*')
-          .eq('year', teacher.year);
-
+          .from('student').select('*').eq('year', teacher.year);
         if (studentError) throw studentError;
 
-        // Create absent records for all students
         const absentRecords = (students || []).map((student) => ({
           session_id: session.id,
           student_id: student.id,
@@ -138,9 +125,7 @@ export default function SessionScreen() {
 
         if (absentRecords.length > 0) {
           const { error: insertError } = await supabase
-            .from('attendance_record')
-            .insert(absentRecords);
-
+            .from('attendance_record').insert(absentRecords);
           if (insertError) throw insertError;
         }
 
@@ -155,21 +140,48 @@ export default function SessionScreen() {
     }
   };
 
+  // ── CHANGE 2: handleCloseSession — sync before close ─────────────────────
+  // Pehle wala directly close kar deta tha.
+  // Problem: Weak WiFi students ke records AsyncStorage mein pending the.
+  // Close hone ke baad wo records FOREVER lost ho jaate — koi sync nahi hota.
+  // Fix: Pending check karo, confirm lo, phir sync karo, phir close karo.
   const handleCloseSession = async () => {
     if (!activeSession) return;
+    const currentPending = await getPendingCount();
+    if (currentPending > 0) {
+      Alert.alert(
+        'Pending Records Found',
+        `${currentPending} student record(s) are saved offline and not yet synced to the server. Sync them before closing?`,
+        [
+          { text: 'Sync & Close', onPress: () => performClose(true) },
+          {
+            text: 'Close Anyway',
+            style: 'destructive',
+            onPress: () => performClose(false),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    } else {
+      performClose(false);
+    }
+  };
 
+  const performClose = async (doSync: boolean) => {
     setLoading(true);
     setError('');
-
     try {
+      if (doSync) {
+        setIsSyncing(true);
+        await syncPendingRecords();
+        setIsSyncing(false);
+        setPendingCount(0);
+      }
+
       const { error: updateError } = await supabase
         .from('attendance_session')
-        .update({
-          closed_at: new Date().toISOString(),
-          is_active: false,
-        })
-        .eq('id', activeSession.id);
-
+        .update({ is_active: false, closed_at: new Date().toISOString() })
+        .eq('id', activeSession!.id);
       if (updateError) throw updateError;
 
       setActiveSession(null);
@@ -177,30 +189,29 @@ export default function SessionScreen() {
       setPresentCount(0);
       setSuccess('Session closed successfully');
     } catch (err: any) {
+      setIsSyncing(false);
       setError(err.message || 'Failed to close session');
     } finally {
       setLoading(false);
     }
   };
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollContent}>
-        {/* Teacher Info */}
+
+        {/* Teacher Info — unchanged */}
         <Card style={styles.infoCard}>
           <Card.Content>
-            <Text variant="labelSmall" style={styles.label}>
-              Subject & Year
-            </Text>
+            <Text variant="labelSmall" style={styles.label}>Subject & Year</Text>
             <Text variant="titleMedium">
               {teacher?.subject} • Year {teacher?.year}
             </Text>
             <Text variant="bodySmall" style={styles.dateText}>
               {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
+                weekday: 'long', year: 'numeric',
+                month: 'long', day: 'numeric',
               })}
             </Text>
           </Card.Content>
@@ -208,7 +219,6 @@ export default function SessionScreen() {
 
         <Divider style={styles.divider} />
 
-        {/* Session Controls */}
         <View style={styles.controlsContainer}>
           {!activeSession ? (
             <>
@@ -216,10 +226,9 @@ export default function SessionScreen() {
                 No Active Session
               </Text>
               <Text style={styles.description}>
-                Click below to open an attendance session. Students will see a 4-digit PIN to
-                mark attendance.
+                Click below to open an attendance session. Students will see a
+                4-digit PIN to mark attendance.
               </Text>
-
               {loading ? (
                 <ActivityIndicator size="large" style={styles.loader} />
               ) : (
@@ -228,13 +237,13 @@ export default function SessionScreen() {
                   onPress={handleOpenSession}
                   style={styles.primaryButton}
                 >
-                  🎯 Open Attendance Session
+                  Open Attendance Session
                 </Button>
               )}
             </>
           ) : (
             <>
-              {/* PIN Display */}
+              {/* PIN Display — unchanged */}
               <Card style={styles.pinCard}>
                 <Card.Content style={styles.pinContent}>
                   <Text variant="labelSmall" style={styles.pinLabel}>
@@ -249,7 +258,7 @@ export default function SessionScreen() {
                 </Card.Content>
               </Card>
 
-              {/* Session Stats */}
+              {/* Stats — unchanged */}
               <Card style={styles.statsCard}>
                 <Card.Content>
                   <View style={styles.statsRow}>
@@ -273,8 +282,33 @@ export default function SessionScreen() {
                 </Card.Content>
               </Card>
 
-              {/* Close Button */}
-              {loading ? (
+              {/* ── CHANGE 3: Pending sync warning banner ── */}
+              {/* Dikhta hai tabhi jab koi record pending ho */}
+              {pendingCount > 0 && (
+                <Card style={styles.pendingCard}>
+                  <Card.Content style={styles.pendingContent}>
+                    <Text style={styles.pendingIcon}>⚠️</Text>
+                    <View style={styles.pendingTextWrap}>
+                      <Text style={styles.pendingTitle}>
+                        {pendingCount} record{pendingCount > 1 ? 's' : ''} pending sync
+                      </Text>
+                      <Text style={styles.pendingSubtitle}>
+                        Syncs automatically, or tap Close to force sync
+                      </Text>
+                    </View>
+                  </Card.Content>
+                </Card>
+              )}
+
+              {/* Close button — syncing state alag dikhta hai */}
+              {isSyncing ? (
+                <View style={styles.syncingBox}>
+                  <ActivityIndicator size="small" color="#1976d2" />
+                  <Text style={styles.syncingText}>
+                    Syncing offline records... please wait
+                  </Text>
+                </View>
+              ) : loading ? (
                 <ActivityIndicator size="large" style={styles.loader} />
               ) : (
                 <Button
@@ -282,18 +316,19 @@ export default function SessionScreen() {
                   buttonColor="#d32f2f"
                   onPress={handleCloseSession}
                   style={styles.dangerButton}
+                  disabled={isSyncing}
                 >
-                  ⏹ Close Session
+                  {pendingCount > 0
+                    ? `Close Session (${pendingCount} pending)`
+                    : 'Close Session'}
                 </Button>
               )}
 
-              {/* Present Students List */}
               <Divider style={styles.divider} />
 
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Students Marked Present ({presentCount})
               </Text>
-
               {presentStudents.length === 0 ? (
                 <Text style={styles.emptyText}>
                   No students have marked attendance yet
@@ -335,116 +370,53 @@ export default function SessionScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
+  infoCard: { marginBottom: 16, backgroundColor: '#e3f2fd' },
+  label: { color: '#666', marginBottom: 4 },
+  dateText: { color: '#999', marginTop: 8 },
+  divider: { marginVertical: 16 },
+  controlsContainer: { marginBottom: 20 },
+  sectionTitle: { marginBottom: 8, fontWeight: 'bold' },
+  description: { color: '#666', marginBottom: 16, lineHeight: 20 },
+  loader: { marginVertical: 20 },
+  primaryButton: { paddingVertical: 8, marginBottom: 16 },
+  dangerButton: { paddingVertical: 8, marginBottom: 16 },
+  pinCard: { backgroundColor: '#fff3e0', marginBottom: 16 },
+  pinContent: { alignItems: 'center', paddingVertical: 20 },
+  pinLabel: { color: '#f57f17', marginBottom: 8 },
+  pinText: { color: '#f57f17', fontWeight: 'bold', letterSpacing: 8 },
+  pinSubtext: { color: '#999', marginTop: 8 },
+  statsCard: { marginBottom: 16, backgroundColor: '#f3e5f5' },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  stat: { alignItems: 'center' },
+  statLabel: { color: '#666', marginBottom: 8 },
+  statNumber: { color: '#7b1fa2', fontWeight: 'bold' },
+  // NEW styles
+  pendingCard: {
+    backgroundColor: '#fff8e1',
+    borderColor: '#f59e0b',
+    borderWidth: 1,
+    marginBottom: 12,
   },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+  pendingContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pendingIcon: { fontSize: 20 },
+  pendingTextWrap: { flex: 1 },
+  pendingTitle: { fontSize: 13, fontWeight: '700', color: '#92400e' },
+  pendingSubtitle: { fontSize: 11, color: '#b45309', marginTop: 2 },
+  syncingBox: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, paddingVertical: 14, backgroundColor: '#e3f2fd',
+    borderRadius: 8, marginBottom: 16,
   },
-  infoCard: {
-    marginBottom: 16,
-    backgroundColor: '#e3f2fd',
-  },
-  label: {
-    color: '#666',
-    marginBottom: 4,
-  },
-  dateText: {
-    color: '#999',
-    marginTop: 8,
-  },
-  divider: {
-    marginVertical: 16,
-  },
-  controlsContainer: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    marginBottom: 8,
-    fontWeight: 'bold',
-  },
-  description: {
-    color: '#666',
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  loader: {
-    marginVertical: 20,
-  },
-  primaryButton: {
-    paddingVertical: 8,
-    marginBottom: 16,
-  },
-  dangerButton: {
-    paddingVertical: 8,
-    marginBottom: 16,
-  },
-  pinCard: {
-    backgroundColor: '#fff3e0',
-    marginBottom: 16,
-  },
-  pinContent: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  pinLabel: {
-    color: '#f57f17',
-    marginBottom: 8,
-  },
-  pinText: {
-    color: '#f57f17',
-    fontWeight: 'bold',
-    letterSpacing: 8,
-  },
-  pinSubtext: {
-    color: '#999',
-    marginTop: 8,
-  },
-  statsCard: {
-    marginBottom: 16,
-    backgroundColor: '#f3e5f5',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  stat: {
-    alignItems: 'center',
-  },
-  statLabel: {
-    color: '#666',
-    marginBottom: 8,
-  },
-  statNumber: {
-    color: '#7b1fa2',
-    fontWeight: 'bold',
-  },
-  studentsList: {
-    gap: 8,
-  },
-  studentCard: {
-    marginBottom: 8,
-  },
-  cardContent: {
-    paddingVertical: 8,
-  },
+  syncingText: { fontSize: 13, color: '#1976d2', fontWeight: '600' },
+  studentsList: { gap: 8 },
+  studentCard: { marginBottom: 8 },
+  cardContent: { paddingVertical: 8 },
   studentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  enrollmentNo: {
-    color: '#999',
-    marginTop: 4,
-  },
-  presentChip: {
-    backgroundColor: '#4caf50',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#999',
-    marginVertical: 20,
-  },
+  enrollmentNo: { color: '#999', marginTop: 4 },
+  presentChip: { backgroundColor: '#4caf50' },
+  emptyText: { textAlign: 'center', color: '#999', marginVertical: 20 },
 });

@@ -1,4 +1,5 @@
 import { format, differenceInDays } from 'date-fns';
+import * as Network from 'expo-network';
 
 export const formatDate = (date: string) => format(new Date(date), 'dd MMM yyyy');
 
@@ -19,4 +20,12 @@ export const generatePIN = (): string => {
 
 export const extractSubnet = (ip: string): string => {
   return ip.split('.').slice(0, 3).join('.');
+};
+
+export const getWifiInfo = async () => {
+  const ip = await Network.getIpAddressAsync();
+  const subnet = ip.split('.').slice(0, 3).join('.');
+  const networkState = await Network.getNetworkStateAsync();
+  const bssid = (networkState as any).bssid ?? null;
+  return { ip, subnet, bssid };
 };

@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import { useEffect, useState } from 'react';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
@@ -6,6 +7,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../store/authStore';
 import { NetworkOfflineBanner } from '../components/NetworkOfflineBanner';
+import { setupAutoSync } from '../lib/offlineSync';
+import { initFaceModel } from '../lib/faceAuth';
 
 export default function RootLayout() {
   const { user } = useAuthStore();
@@ -15,6 +18,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     setMounted(true);
+    initFaceModel().catch(console.warn);
+    const unsubscribe = setupAutoSync();
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -29,6 +35,8 @@ export default function RootLayout() {
       else if (user.role === 'teacher') router.replace('/(teacher)/session');
       else if (user.role === 'hod') router.replace('/(hod)/dashboard');
     }
+
+
   }, [user, segments, mounted]);
 
   return (

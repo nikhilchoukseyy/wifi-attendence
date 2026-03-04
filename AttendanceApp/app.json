@@ -13,10 +13,16 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      "expo-camera"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.example.attendanceapp"
+      "bundleIdentifier": "com.example.attendanceapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera required for face verification."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -30,11 +36,22 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "ACCESS_WIFI_STATE",
+        "ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e6fa9c00-10aa-4015-8511-dd04582b0afe"
+      }
     }
   }
 }

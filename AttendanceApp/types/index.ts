@@ -25,6 +25,9 @@ export interface Student {
   year: 1 | 2 | 3 | 4;
   device_id: string | null;
   is_device_bound: boolean;
+  face_image_url: string | null;
+  face_registered: boolean;
+  face_embedding: number[] | null;
   created_at: string;
 }
 
@@ -39,6 +42,8 @@ export interface AttendanceSession {
   session_pin: string;
   is_active: boolean;
   router_subnet: string;
+  session_bssid: string | null;
+  expires_at: string;
 }
 
 export interface AttendanceRecord {
@@ -48,6 +53,10 @@ export interface AttendanceRecord {
   status: 'present' | 'absent';
   marked_at: string | null;
   is_manual_edit: boolean;
+  face_verified: boolean;
+  liveness_verified: boolean;
+  sync_status: 'pending' | 'synced' | 'failed';
+  local_timestamp: string | null;
 }
 
 export type UserRole = 'student' | 'teacher' | 'hod';

@@ -7,7 +7,6 @@ import {
   Snackbar,
   Card,
   TextInput,
-  Chip,
 } from 'react-native-paper';
 import * as Network from 'expo-network';
 import { useAuthStore } from '../../store/authStore';
@@ -26,39 +25,52 @@ export default function MarkAttendanceScreen() {
   const [success, setSuccess] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [markedMessage, setMarkedMessage] = useState('');
-  const [sessionExpired, setSessionExpired] = useState(false);
 
+  // ✅ RULE: useEffect MUST come before any early return
+  // React requires all hooks to be called every render, in the same order
+  // The guard goes INSIDE the effect, not outside
   useEffect(() => {
+    if (!student) return; // guard inside is fine — hook itself is always called
+
     checkForActiveSession();
-    // Auto-refresh every 30 seconds
+
     const interval = setInterval(() => {
       checkForActiveSession();
     }, 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [student?.id]); // re-runs when student loads
+
+  // ✅ Early return AFTER all hooks — this is now safe
+  if (!student) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+        <Text style={{ marginTop: 12, color: '#666' }}>Loading student data...</Text>
+      </View>
+    );
+  }
 
   const checkForActiveSession = async () => {
+    if (!student) return;
+
     try {
       const { data: sessions, error: err } = await supabase
         .from('attendance_session')
         .select('*')
         .eq('is_active', true)
         .eq('year', student.year)
-        .gt('opened_at', new Date(Date.now() - 15 * 60 * 1000).toISOString()) // Last 15 minutes
+        .gt('opened_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
         .single();
 
       if (err && err.code === 'PGRST116') {
-        // No matching records
         setActiveSession(null);
-        setSessionExpired(false);
         return;
       }
 
       if (err) throw err;
 
       setActiveSession(sessions as AttendanceSession);
-      setSessionExpired(false);
       setPin('');
       setMarkedMessage('');
     } catch (err: any) {
@@ -108,8 +120,8 @@ export default function MarkAttendanceScreen() {
         );
       }
 
-      // Check if student already marked for this session
-      const { data: existing, error: checkError } = await supabase
+      // Check if already marked
+      const { data: existing } = await supabase
         .from('attendance_record')
         .select('id')
         .eq('session_id', activeSession.id)
@@ -123,7 +135,7 @@ export default function MarkAttendanceScreen() {
         return;
       }
 
-      // Insert or update attendance record
+      // Insert attendance record
       const { error: insertError } = await supabase
         .from('attendance_record')
         .upsert(
@@ -143,7 +155,6 @@ export default function MarkAttendanceScreen() {
       setPin('');
       setMarkedMessage('✓ Attendance marked successfully! You can close this app.');
 
-      // Auto-refresh session list
       setTimeout(() => {
         checkForActiveSession();
       }, 2000);
@@ -184,8 +195,8 @@ export default function MarkAttendanceScreen() {
                 No Attendance Session
               </Text>
               <Text variant="bodyMedium" style={styles.emptyText}>
-                Your teacher has not opened an attendance session yet. Check back in a moment or
-                wait for your teacher to open a session.
+                Your teacher has not opened an attendance session yet. Check back
+                in a moment or wait for your teacher to open a session.
               </Text>
               <Button mode="outlined" onPress={onRefresh} style={styles.refreshButton}>
                 Refresh
@@ -258,7 +269,11 @@ export default function MarkAttendanceScreen() {
               <Text variant="bodyMedium" style={styles.successText}>
                 {markedMessage}
               </Text>
-              <Button mode="outlined" onPress={() => setMarkedMessage('')} style={styles.button}>
+              <Button
+                mode="outlined"
+                onPress={() => setMarkedMessage('')}
+                style={styles.button}
+              >
                 Continue
               </Button>
             </Card.Content>
