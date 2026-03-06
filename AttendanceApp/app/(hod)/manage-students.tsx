@@ -164,7 +164,7 @@ export default function ManageStudentsScreen() {
 
       // HOD photo choose kare — square crop forced (face ke liye best)
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: 'Images' as any,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 1,

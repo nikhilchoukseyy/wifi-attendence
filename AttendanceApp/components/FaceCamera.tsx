@@ -1,22 +1,23 @@
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, ActivityIndicator } from 'react-native-paper';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
-// ─── Props ───────────────────────────────────────────────────────────────────
+// Get device screen dimensions — so camera fills the screen properly
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 interface FaceCameraProps {
-  instruction: string;       // Text shown to user — "Look at camera" / "Now blink"
-  onCapture: (uri: string) => void;  // Called with photo URI after capture
-  onError: (message: string) => void; // Called on permission deny or camera error
+  instruction: string;
+  onCapture: (uri: string) => void;
+  onError: (message: string) => void;
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function FaceCamera({ instruction, onCapture, onError }: FaceCameraProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [capturing, setCapturing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
-  // ── Permission not yet determined ──
+  // ── Permission loading ──
   if (!permission) {
     return (
       <View style={styles.centered}>
@@ -50,18 +51,18 @@ export default function FaceCamera({ instruction, onCapture, onError }: FaceCame
     );
   }
 
-  // ── Capture photo ──
+  // ── Capture ──
   const handleCapture = async () => {
     if (!cameraRef.current || capturing) return;
     try {
       setCapturing(true);
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,          // 80% quality — enough for face match, not too heavy
+        quality: 0.8,
         base64: false,
         skipProcessing: false,
       });
       if (!photo?.uri) throw new Error('Failed to capture photo. Try again.');
-      onCapture(photo.uri);   // pass URI back to parent
+      onCapture(photo.uri);
     } catch (err: any) {
       onError(err.message ?? 'Camera capture failed. Try again.');
     } finally {
@@ -69,27 +70,31 @@ export default function FaceCamera({ instruction, onCapture, onError }: FaceCame
     }
   };
 
-  // ── Camera UI ──
   return (
     <View style={styles.container}>
 
-      {/* Instruction text — shown above camera */}
+      {/* Instruction */}
       <View style={styles.instructionBox}>
         <Text style={styles.instructionText}>{instruction}</Text>
       </View>
 
-      {/* Camera preview */}
+      {/* Camera — explicit pixel dimensions, NOT flex:1 */}
+      {/* WHY: flex:1 inside ScrollView = 0 height. Fixed dimensions always work. */}
       <View style={styles.cameraWrapper}>
+
+        {/* CameraView — no children (native component restriction) */}
         <CameraView
           ref={cameraRef}
           style={styles.camera}
-          facing={'front'}   // always front camera for face scan
-        >
-          {/* Face guide overlay — oval shape hint */}
-          <View style={styles.overlay}>
-            <View style={styles.faceOval} />
-          </View>
-        </CameraView>
+          facing="front"
+        />
+
+        {/* Oval overlay — absolute positioned SIBLING of CameraView */}
+        {/* WHY: CameraView doesn't support children on Android */}
+        <View style={styles.overlay} pointerEvents="none">
+          <View style={styles.faceOval} />
+        </View>
+
       </View>
 
       {/* Capture button */}
@@ -111,60 +116,37 @@ export default function FaceCamera({ instruction, onCapture, onError }: FaceCame
       <Text style={styles.hintText}>
         Position your face inside the oval, then tap the button
       </Text>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // ── Loading / Error states ──
+  // ── Permission / loading states ──
   centered: {
-    flex: 1,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT * 0.7,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
     backgroundColor: '#0a0a0a',
   },
-  statusText: {
-    color: '#fff',
-    marginTop: 12,
-    fontSize: 14,
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  errorTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  errorSubtitle: {
-    color: '#94a3b8',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  permissionButton: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  permissionButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
-  },
+  statusText: { color: '#fff', marginTop: 12, fontSize: 14 },
+  errorIcon: { fontSize: 48, marginBottom: 12 },
+  errorTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  errorSubtitle: { color: '#94a3b8', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  permissionButton: { backgroundColor: '#3b82f6', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 8 },
+  permissionButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  // ── Main camera UI ──
+  // ── Main UI ──
+  // FIX: Use explicit width/height instead of flex:1
+  // flex:1 inside ScrollView gives 0 height — camera becomes invisible
   container: {
-    flex: 1,
+    width: SCREEN_WIDTH,          // full screen width
     backgroundColor: '#0a0a0a',
     alignItems: 'center',
     paddingVertical: 24,
+    paddingBottom: 32,
   },
   instructionBox: {
     backgroundColor: '#1e3a5f',
@@ -175,6 +157,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     borderLeftWidth: 4,
     borderLeftColor: '#3b82f6',
+    width: SCREEN_WIDTH - 40,     // full width minus padding
   },
   instructionText: {
     color: '#93c5fd',
@@ -182,19 +165,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+
+  // Camera wrapper — explicit height, not flex
   cameraWrapper: {
-    width: 300,
-    height: 380,
+    width: SCREEN_WIDTH - 40,     // full width minus padding
+    height: SCREEN_HEIGHT * 0.45, // 45% of screen height — visible on all devices
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: '#3b82f6',
+    position: 'relative',         // so absolute children are positioned inside this
   },
   camera: {
-    flex: 1,
+    width: '100%',
+    height: '100%',               // fills the cameraWrapper completely
   },
+
+  // Oval overlay — sits ON TOP of camera using absolute position
   overlay: {
-    flex: 1,
+    position: 'absolute',         // doesn't affect layout, floats above camera
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -235,11 +228,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 36,
   },
-  capturingText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  capturingText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   hintText: {
     color: '#64748b',
     fontSize: 12,

@@ -91,6 +91,12 @@ export default function SessionScreen() {
     try {
       const { subnet, bssid } = await getWifiInfo();
       const pin = generatePIN();
+      
+      await supabase
+        .from('attendance_session')
+        .update({ is_active: false })
+        .eq('teacher_id', teacher.id)
+        .eq('is_active', true);
 
       const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_session')

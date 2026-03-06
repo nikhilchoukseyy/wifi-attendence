@@ -1,84 +1,44 @@
 # Wireless Attendance Management System
 
-A complete React Native + Expo + Supabase attendance tracking application for educational institutions.
-
-## Features
-
-### 🎓 Student Features
-- **Device-bound login** (one device per student)
-- **Real-time session detection** with 30-second polling
-- **PIN + WiFi verification** for secure attendance marking
-- **Attendance history** with color-coded status (present/absent)
-- **Attendance percentage** calculation and 75% threshold indicator
-
-### 👨‍🏫 Teacher Features
-- **Session management** - open/close attendance sessions
-- **4-digit PIN generation** and display for students
-- **Real-time attendance tracking** via Supabase Realtime
-- **Manual attendance editing** with edit tracking
-- **Attendance filtering** - by date range with 75% calculation
-- **Live student list** showing who marked present
-
-### 👔 HOD Features
-- **Student management** - add/edit/delete students by year
-- **Teacher management** - create accounts with hashed passwords
-- **Attendance dashboard** - overview by subject and teacher
-- **PDF reports** - generate attendance reports by date range
-- **Year-based filtering** on all views
-
-### 🔒 Security Features
-- **Device binding** - students can only use one device
-- **PIN verification** - 4-digit PIN required for marking
-- **WiFi subnet verification** - ensures students are in classroom
-- **Password hashing** - bcryptjs for teacher accounts
-- **Row-level security** - enabled on all database tables
-- **Manual edit tracking** - marks when attendance is manually changed
+A React Native + Expo + Supabase attendance tracking application for educational institutions. Supports role-based access (Student, Teacher, HOD), device binding, WiFi subnet verification, face registration, and offline sync.
 
 ---
 
-## Installation & Setup
+## Features
 
-### Prerequisites
-- Node.js 18+ and npm
-- Supabase account (free at https://supabase.com)
-- Expo CLI: `npm install -g expo-cli`
+### Student Features
+- **Device-bound login** – one device per student
+- **Face registration** – first-time login captures face, matches against HOD-uploaded reference photo (TensorFlow + MediaPipe)
+- **Session detection** – 30-second polling for active sessions
+- **PIN + WiFi verification** – secure attendance marking
+- **Offline marking** – attendance queued locally when offline, auto-syncs when back online
+- **Attendance history** – color-coded present/absent with percentage
+- **75% threshold** – indicator for attendance compliance
 
-### 1. Create Supabase Project
+### Teacher Features
+- **Session management** – open/close attendance sessions (15-min expiry)
+- **4-digit PIN** – auto-generated and displayed for students
+- **Real-time tracking** – Supabase Realtime for live attendance list
+- **Pending sync warning** – shows when students have offline records before closing
+- **Manual editing** – edit attendance with edit tracking
+- **Filter** – by date range with 75% calculation
+- **Live student list** – who has marked present
 
-1. Go to [supabase.com](https://supabase.com) and create a free project
-2. In **SQL Editor**, run the schema from `supabase/schema.sql` to create all tables
-3. In **Project Settings > API**, copy:
-   - **Project URL**
-   - **anon public key**
+### HOD Features
+- **Student management** – add/edit/delete by year
+- **Face photo upload** – reference photos for student face verification
+- **Teacher management** – create accounts with SHA256-hashed passwords
+- **Attendance dashboard** – overview by subject and teacher
+- **PDF reports** – generate reports by date range
+- **Year-based filtering** – on all views
 
-### 2. Configure Supabase Credentials
-
-Edit `lib/supabase.ts`:
-```typescript
-const SUPABASE_URL = 'YOUR_PROJECT_URL'; // Paste here
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY'; // Paste here
-```
-
-### 3. Create First HOD Account
-
-1. In Supabase, go to **Authentication > Users > Add User**
-2. Enter email and password for HOD
-3. Go to **Database > hod table** and insert a row:
-   - `name`: HOD's name
-   - `email`: Same email as auth
-   - `department`: Your department name
-
-### 4. Install & Run
-
-```bash
-cd AttendanceApp
-npm install
-npx expo start
-
-# Scan QR code with Expo Go app (iOS/Android)
-# For testing features like device binding, use:
-npx expo start --dev-client
-```
+### Security Features
+- **Device binding** – students restricted to one device
+- **PIN verification** – 4-digit PIN required for marking
+- **WiFi subnet verification** – ensures students are on classroom network (IP-based)
+- **Password hashing** – SHA256 (expo-crypto) for teacher accounts
+- **Row-level security** – enabled on all database tables
+- **Manual edit tracking** – records when attendance is manually changed
 
 ---
 
@@ -87,98 +47,165 @@ npx expo start --dev-client
 ```
 AttendanceApp/
 ├── app/
-│   ├── _layout.tsx                  # Root auth guard + network banner
-│   ├── index.tsx                    # Role selector screen
+│   ├── _layout.tsx                  # Root: auth guard, network banner, face init, offline sync
+│   ├── index.tsx                    # Role selector (Student / Teacher / HOD)
 │   ├── (auth)/
-│   │   ├── hod-login.tsx           # HOD email + password login
-│   │   ├── teacher-login.tsx       # Teacher username + password login
-│   │   └── student-login.tsx       # Student enrollment + device binding
+│   │   ├── hod-login.tsx            # HOD email + password (Supabase Auth)
+│   │   ├── teacher-login.tsx        # Teacher username + password (SHA256)
+│   │   └── student-login.tsx        # Enrollment + device binding + face registration
 │   ├── (hod)/
-│   │   ├── _layout.tsx             # HOD tab navigation
-│   │   ├── dashboard.tsx           # Subject overview + stats
-│   │   ├── manage-students.tsx     # CRUD students
-│   │   ├── manage-teachers.tsx     # CRUD teachers (with password hashing)
-│   │   └── download-pdf.tsx        # Generate attendance PDFs
+│   │   ├── _layout.tsx              # HOD tab navigation
+│   │   ├── dashboard.tsx            # Subject overview + stats
+│   │   ├── manage-students.tsx      # CRUD students + face photo upload
+│   │   ├── manage-teachers.tsx      # CRUD teachers (SHA256 password)
+│   │   └── download-pdf.tsx         # Generate attendance PDFs
 │   ├── (teacher)/
-│   │   ├── _layout.tsx             # Teacher tab navigation
-│   │   ├── session.tsx             # Open/close attendance + show PIN
-│   │   ├── students.tsx            # Manual attendance edit
-│   │   └── filter.tsx              # Attendance by date range + 75% calc
+│   │   ├── _layout.tsx              # Teacher tab navigation
+│   │   ├── session.tsx              # Open/close session, PIN, live list
+│   │   ├── students.tsx             # Manual attendance edit
+│   │   └── filter.tsx               # Date range + 75% calculation
 │   └── (student)/
-│       ├── _layout.tsx             # Student tab navigation
-│       ├── mark-attendance.tsx     # PIN + subnet check + mark
-│       └── my-attendance.tsx       # History + percentage display
+│       ├── _layout.tsx              # Student tab navigation
+│       ├── mark-attendance.tsx      # PIN + subnet check + mark
+│       └── my-attendance.tsx        # History + percentage
 ├── lib/
-│   ├── supabase.ts                 # Supabase client config
-│   ├── utils.ts                    # Utilities (dates, colors, PINs, subnets)
-│   └── errorHandling.ts            # Network detection + error parsing
+│   ├── supabase.ts                  # Supabase client config
+│   ├── faceAuth.ts                  # Face embedding, matching (TensorFlow + MediaPipe)
+│   ├── offlineSync.ts               # Pending queue, auto-sync on reconnect
+│   ├── utils.ts                     # PIN, subnet, WiFi info, dates, colors
+│   └── errorHandling.ts             # Network detection + error parsing
 ├── store/
-│   ├── authStore.ts                # (Zustand) User + login state
-│   ├── sessionStore.ts             # (Zustand) Active session state
-│   └── attendanceStore.ts          # (Zustand) Attendance records cache
+│   ├── authStore.ts                 # User, role, login/logout
+│   ├── sessionStore.ts              # Active session state
+│   └── attendanceStore.ts           # Attendance records cache
 ├── types/
-│   └── index.ts                    # All TypeScript interfaces
+│   └── index.ts                     # TypeScript interfaces
 ├── components/
-│   └── NetworkOfflineBanner.tsx     # Shows when offline
-└── supabase/
-    └── schema.sql                  # Full database schema
+│   ├── FaceCamera.tsx               # Camera for face capture
+│   └── NetworkOfflineBanner.tsx     # Offline indicator
+├── supabase/
+│   └── schema.sql                   # Base database schema
+├── assets/
+├── app.json
+├── package.json
+├── tsconfig.json
+└── metro.config.js
 ```
 
 ---
 
 ## Database Schema
 
-### Tables
+### Tables (base schema in `supabase/schema.sql`)
 
 **hod**
-- `id` (UUID) - Primary key
-- `name` - HOD name
-- `email` - Unique email (linked to Supabase Auth)
-- `department` - Department name
-- `created_at` - Timestamp
+- `id` (UUID) – Primary key, matches Supabase Auth user id
+- `name` – HOD name
+- `email` – Unique (linked to Supabase Auth)
+- `department` – Department name
+- `created_at` – Timestamp
 
 **teacher**
-- `id` (UUID) - Primary key
-- `hod_id` (UUID) - Foreign key to hod
-- `name` - Teacher name
-- `subject` - Subject taught
-- `year` (1-4) - Year which they teach
-- `username` - Unique username for login
-- `password_hash` - Bcrypt hashed password
-- `created_at` - Timestamp
+- `id` (UUID) – Primary key
+- `hod_id` (UUID) – Foreign key to hod
+- `name` – Teacher name
+- `subject` – Subject taught
+- `year` (1–4) – Year they teach
+- `username` – Unique username for login
+- `password_hash` – SHA256-hashed password (expo-crypto)
+- `created_at` – Timestamp
 
 **student**
-- `id` (UUID) - Primary key
-- `hod_id` (UUID) - Foreign key to hod
-- `name` - Student name
-- `enrollment_no` - Unique enrollment number
-- `mobile_no` - Unique mobile number
-- `year` (1-4) - Student year
-- `device_id` - Device binding (set on first login)
-- `is_device_bound` - Boolean flag
-- `created_at` - Timestamp
+- `id` (UUID) – Primary key
+- `hod_id` (UUID) – Foreign key to hod
+- `name` – Student name
+- `enrollment_no` – Unique enrollment number
+- `mobile_no` – Unique mobile number
+- `year` (1–4) – Student year
+- `device_id` – Set on first login (device binding)
+- `is_device_bound` – Boolean
+- `face_image_url` – Storage path/URL for reference photo (HOD uploads)
+- `face_registered` – Boolean (set after first face verification)
+- `face_embedding` – Stored embedding for reinstall recovery
+- `created_at` – Timestamp
 
 **attendance_session**
-- `id` (UUID) - Primary key
-- `teacher_id` (UUID) - Foreign key to teacher
-- `subject` - Subject name (copied from teacher)
-- `year` (1-4) - Class year
-- `date` - Session date
-- `opened_at` - Timestamp when opened
-- `closed_at` - Timestamp when closed (NULL = open)
-- `router_subnet` - Classroom WiFi subnet (e.g., "192.168.1")
-- `session_pin` - 4-digit PIN for students
-- `is_active` - Boolean flag
-- `created_at` - Timestamp
+- `id` (UUID) – Primary key
+- `teacher_id` (UUID) – Foreign key to teacher
+- `subject` – Subject name
+- `year` (1–4) – Class year
+- `date` – Session date
+- `opened_at` – When opened
+- `closed_at` – When closed (NULL = open)
+- `router_subnet` – Classroom WiFi subnet (e.g. "192.168.1")
+- `session_pin` – 4-digit PIN
+- `session_bssid` – WiFi BSSID (optional)
+- `expires_at` – Session expiry (e.g. 15 min)
+- `is_active` – Boolean
+- `created_at` – Timestamp
 
 **attendance_record**
-- `id` (UUID) - Primary key
-- `session_id` (UUID) - Foreign key to attendance_session
-- `student_id` (UUID) - Foreign key to student
-- `status` - 'present' or 'absent'
-- `marked_at` - Timestamp when marked
-- `is_manual_edit` - Boolean flag for teacher edits
-- `UNIQUE(session_id, student_id)` - One record per student per session
+- `id` (UUID) – Primary key
+- `session_id` (UUID) – Foreign key to attendance_session
+- `student_id` (UUID) – Foreign key to student
+- `status` – 'present' or 'absent'
+- `marked_at` – When marked
+- `is_manual_edit` – Boolean for teacher edits
+- `face_verified` – Boolean (face check at mark time)
+- `sync_status` – 'pending' | 'synced' | 'failed' (offline sync)
+- `local_timestamp` – For offline records
+- `UNIQUE(session_id, student_id)` – One record per student per session
+
+### Storage
+- **face-photos** bucket – HOD-uploaded reference photos for students
+
+### Realtime
+- `attendance_record` – Realtime enabled for INSERT events (teacher live view)
+
+> **Note:** `schema.sql` is the base. Face and offline sync features use extra columns (`face_image_url`, `face_registered`, `face_embedding`, `session_bssid`, `expires_at`, `face_verified`, `sync_status`, `local_timestamp`). Add these via migrations if not present.
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+- Node.js 18+
+- Supabase account (free at https://supabase.com)
+- Expo Go app (for device testing)
+
+### 1. Create Supabase Project
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. Run `supabase/schema.sql` in **SQL Editor**
+3. Enable **Realtime** on `attendance_record` (Database → Replication)
+4. Create **Storage** bucket `face-photos` (public or with RLS as needed)
+5. Copy **Project URL** and **anon public key** from Project Settings → API
+
+### 2. Configure Credentials
+
+Edit `lib/supabase.ts`:
+```typescript
+const SUPABASE_URL = 'YOUR_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+```
+
+### 3. Create First HOD
+
+1. **Authentication → Users → Add User** – add HOD email and password
+2. **Database → hod** – insert row with same email and department
+
+### 4. Install & Run
+
+```bash
+cd AttendanceApp
+npm install
+npx expo start
+```
+
+Scan QR code with Expo Go. For device binding and camera, use:
+```bash
+npx expo start --dev-client
+```
 
 ---
 
@@ -186,147 +213,108 @@ AttendanceApp/
 
 ### 1. HOD Setup
 1. Log in as HOD
-2. Go to **Students** and add all students (Year 1, 2, 3, 4)
-3. Go to **Teachers** and create teacher accounts:
-   - Name: "Mr. Smith"
-   - Subject: "Mathematics"
-   - Year: 1
-   - Username: "mrsmith"
-   - Password: auto-hashed
-4. View **Dashboard** for overview
+2. **Students** – add students (year 1–4)
+3. For each student, upload face reference photo
+4. **Teachers** – create teacher accounts (username + password)
+5. Use **Dashboard** for overview
 
-### 2. Teacher Attendance
+### 2. Teacher Session
 1. Log in as teacher
-2. Go to **Session** tab
-3. Click "🎯 Open Attendance Session"
-   - 4-digit PIN is generated
-   - All students automatically marked absent
-   - PIN displayed on screen for students
-4. Students scan QR or enter PIN
-5. Click "⏹ Close Session"
-6. Manual edits or browse past sessions in **Students** tab
-7. Use **Filter** to find students below 75%
+2. **Session** tab → **Open Attendance Session**
+   - PIN and subnet are set
+   - All students pre-marked absent
+   - PIN shown for students
+3. Students mark attendance (PIN + same WiFi)
+4. Close session when done (optional sync of offline records)
+5. **Students** – manual edit; **Filter** – date range, 75%
 
-### 3. Student Marking
-1. Student logs in (name + enrollment + mobile)
-   - First login binds device
-   - Subsequent logins blocked if using different device
-2. Go to **Mark Attendance** tab
-3. Session auto-appears when teacher opens it
-4. Enter PIN shown by teacher
-5. App verifies WiFi subnet and marks present
-6. Go to **My Attendance** tab to see history and %
+### 3. Student Flow
+1. Log in (name + enrollment + mobile)
+   - First time: face capture and match with HOD photo
+   - Device bound on first successful login
+2. **Mark Attendance** – enter PIN when session is active
+3. App checks WiFi subnet and marks present
+4. **My Attendance** – history and percentage
 
 ---
 
 ## Error Handling
 
-All screens include:
-- ✅ Network offline detection (red banner at top)
-- ✅ Loading states with ActivityIndicator
-- ✅ Snackbar error messages
-- ✅ Empty states with helpful messages
-- ✅ Input validation
-- ✅ Duplicate prevention
-- ✅ Session expiry handling
+- Network offline detection (banner)
+- Loading states and Snackbars
+- Empty states and validation
+- Duplicate prevention
+- Session expiry (15 min)
 
-Common error messages:
-- "Network connection error" - offline
-- "You must be connected to the classroom WiFi" - subnet mismatch
-- "Invalid PIN" - wrong PIN entered
-- "This account is already linked to another device" - device binding violation
-- "You have already marked attendance" - duplicate marking
+Common messages:
+- "You must be connected to the classroom WiFi" – subnet mismatch
+- "Invalid PIN" – wrong PIN
+- "This account is already linked to another device" – device binding
+- "You have already marked attendance" – duplicate
+- "HOD has not uploaded your reference photo yet" – no face photo
 
 ---
 
 ## Security Considerations
 
-⚠️ **Important Notes:**
-
-1. **WiFi Subnet Check** is a best-effort verification, NOT a guarantee
-   - Primary anti-proxy mechanism is the **4-digit PIN**
-   - PIN changes every session
-
-2. **Device Binding** prevents:
-   - One student account used by multiple devices
-   - (Does not prevent phone sharing within same device)
-
-3. **Passwords**:
-   - Never stored in plaintext
-   - Always hashed with bcryptjs before saving
-   - HOD uses Supabase Auth for additional security
-
-4. **Database Security**:
-   - Row-level security enabled on all tables
-   - Implement RLS policies in Supabase Dashboard as needed
+1. **WiFi subnet** – Best-effort; primary anti-proxy is the 4-digit PIN
+2. **Device binding** – Prevents one account on multiple devices
+3. **Passwords** – Teacher passwords hashed with SHA256 (expo-crypto); HOD uses Supabase Auth
+4. **Row-level security** – Enabled on all tables; configure RLS policies in Supabase as needed
 
 ---
 
 ## Testing
 
-### Test Users Setup
+### Test Users
 
-**HOD:**
-- Email: `hod@example.com`
-- Password: `test123`
+**HOD:** Create in Supabase Auth + `hod` table  
+**Teacher:** Create via HOD → Teachers (username + password)  
+**Student:** Create via HOD → Students; upload face photo; login to bind device
 
-**Teacher (Year 1):**
-- Username: `teacher1`
-- Password: `pass123`
-- Subject: Mathematics
-
-**Student (Year 1):**
-- Name: John Doe
-- Enrollment: `2024001`
-- Mobile: `9876543210`
-
-### Test Scenarios
-
-1. **Device Binding**: Login as student on two different devices/emulators
-2. **PIN Verification**: Try wrong PIN on student app
-3. **WiFi Subnet**: Change network and try to mark attendance
-4. **Manual Edits**: Toggle attendance in teacher students tab
-5. **PDF Export**: Generate PDF report from HOD app
+### Scenarios
+1. Device binding – login as student on two devices
+2. PIN – try wrong PIN on student app
+3. WiFi – change network and try to mark
+4. Offline – mark attendance offline, then go online
+5. Face registration – first-time student login with camera
 
 ---
 
 ## Troubleshooting
 
-### "Project URL" or "Anon Key" is incorrect
-→ Check Supabase Dashboard > Project Settings > API
-
-### Student login fails
-→ Verify student exists in database with exact name, enrollment_no, mobile_no
-
-### Session doesn't appear for student
-→ Check teacher's year matches student's year
-
-### PIN is wrong
-→ Make sure teacher's session is still open (not closed)
-
-### WiFi subnet error
-→ Both teacher and student must be on same WiFi network
-
-### Password hashing fails
-→ Ensure `bcryptjs` is installed: `npm install bcryptjs`
+| Issue | Solution |
+|-------|----------|
+| Wrong Project URL or Anon Key | Supabase Dashboard → Project Settings → API |
+| Student login fails | Check name, enrollment_no, mobile_no match |
+| Session not visible for student | Teacher’s year must match student’s year |
+| PIN wrong | Ensure session is still open (not closed) |
+| WiFi subnet error | Teacher and student on same network |
+| Face verification fails | HOD must upload reference photo first |
+| Teacher login fails | Verify username and password (SHA256 hash) |
 
 ---
 
-## Next Steps
+## Tech Stack
 
-### Enhancements
-- [ ] SMS notifications to students/parents
-- [ ] Monthly attendance reports
-- [ ] Biometric attendance (fingerprint/face)
+| Layer | Technology |
+|-------|------------|
+| Framework | React Native 0.81, Expo 54 |
+| Routing | Expo Router 6 |
+| State | Zustand |
+| UI | React Native Paper |
+| Backend | Supabase (PostgreSQL, Auth, Realtime, Storage) |
+| Face | TensorFlow.js, MediaPipe Face Detection |
+| Offline | AsyncStorage, NetInfo |
+
+---
+
+## Next Steps (Planned)
+
+- [ ] Face verification at mark time (not just at login)
+- [ ] SMS / email notifications
 - [ ] Attendance analytics dashboard
-- [ ] Parent app for viewing child's attendance
-- [ ] Automated low-attendance alerts
-
-### Deployment
-- [ ] Build APK for Android: `eas build --platform android`
-- [ ] Build IPA for iOS: `eas build --platform ios`
-- [ ] Configure app.json properly
-- [ ] Set up EAS account for uploads
+- [ ] EAS build for APK/IPA
 
 ---
 
@@ -338,7 +326,6 @@ This project is provided as-is for educational purposes.
 
 ## Support
 
-For issues or questions, refer to:
 - [Supabase Docs](https://supabase.com/docs)
 - [Expo Docs](https://docs.expo.dev)
 - [React Native Docs](https://reactnative.dev/docs/getting-started)

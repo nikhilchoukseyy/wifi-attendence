@@ -177,7 +177,7 @@ export default function StudentsScreen() {
         {/* Session Picker */}
         {sessions.length > 0 ? (
           <>
-            <Text variant="labelSmall" style={styles.label}>
+            <Text variant="labelSmall" style={styles.label} >
               Select Session
             </Text>
             <View style={styles.pickerContainer}>
@@ -188,6 +188,7 @@ export default function StudentsScreen() {
                 {sessions.map((session) => (
                   <Picker.Item
                     key={session.id}
+                    style={styles.pickerOptions}
                     label={`${session.subject} - ${new Date(session.opened_at).toLocaleTimeString()}`}
                     value={session.id}
                   />
@@ -300,6 +301,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginBottom: 16,
   },
+  pickerOptions: {
+    color: '#333',
+  },
   emptyCard: {
     marginBottom: 16,
   },
@@ -344,4 +348,7 @@ const styles = StyleSheet.create({
   loader: {
     marginVertical: 40,
   },
+  sessionText:{
+    color:'#f71b1b',
+  }
 });
