@@ -27,10 +27,7 @@ export default function SessionScreen() {
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // ── CHANGE 1: Pending count polling ──────────────────────────────────────
-  // Pehle yeh nahi tha. Kyun chahiye: teacher ko pata chale ki kitne
-  // students ke records abhi AsyncStorage mein hain — sync nahi hue.
-  // Har 5 second pe refresh hota hai jab session active ho.
+ 
   useEffect(() => {
     if (!activeSession) return;
     getPendingCount().then(setPendingCount);
@@ -39,7 +36,7 @@ export default function SessionScreen() {
     }, 5000);
     return () => clearInterval(interval);
   }, [activeSession]);
-  // ─────────────────────────────────────────────────────────────────────────
+
 
   useEffect(() => {
     if (activeSession) {
@@ -52,7 +49,12 @@ export default function SessionScreen() {
           table: 'attendance_record',
           filter: `session_id=eq.${activeSession.id}`,
         }, () => { fetchPresentStudents(); })
-        .subscribe();
+        .on('postgres_changes', {
+          event: 'UPDATE',        
+          schema: 'public',
+          table: 'attendance_record',
+          filter: `session_id=eq.${activeSession.id}`,
+        }, () => { fetchPresentStudents(); }).subscribe();
       return () => { subscription.unsubscribe(); };
     }
   }, [activeSession]);
@@ -84,19 +86,27 @@ export default function SessionScreen() {
     }
   };
 
-  // handleOpenSession — already had bssid + expires_at, unchanged
+
   const handleOpenSession = async () => {
     setLoading(true);
     setError('');
     try {
       const { subnet, bssid } = await getWifiInfo();
+      console.log('=== OPEN SESSION ===');
+      console.log('teacherId:', teacherId);
+      console.log('teacher.year:', teacher?.year);
+      console.log('subnet:', subnet);
+
       const pin = generatePIN();
-      
-      await supabase
+
+ 
+      const { error: deactivateError } = await supabase
         .from('attendance_session')
         .update({ is_active: false })
-        .eq('teacher_id', teacher.id)
+        .eq('teacher_id', teacherId)
         .eq('is_active', true);
+      console.log('Deactivate error:', deactivateError);
+
 
       const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_session')
@@ -113,44 +123,55 @@ export default function SessionScreen() {
           expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         }])
         .select();
+      console.log('Session insert error:', sessionError);
+      console.log('Session data:', JSON.stringify(sessionData));
 
       if (sessionError) throw sessionError;
-
-      if (sessionData && sessionData.length > 0) {
-        const session = sessionData[0] as AttendanceSession;
-
-        const { data: students, error: studentError } = await supabase
-          .from('student').select('*').eq('year', teacher.year);
-        if (studentError) throw studentError;
-
-        const absentRecords = (students || []).map((student) => ({
-          session_id: session.id,
-          student_id: student.id,
-          status: 'absent' as const,
-        }));
-
-        if (absentRecords.length > 0) {
-          const { error: insertError } = await supabase
-            .from('attendance_record').insert(absentRecords);
-          if (insertError) throw insertError;
-        }
-
-        setStudentCount(students?.length || 0);
-        setActiveSession(session);
-        setSuccess(`Session opened! PIN: ${pin}`);
+      if (!sessionData || sessionData.length === 0) {
+        console.log('NO SESSION DATA RETURNED');
+        return;
       }
+
+      const session = sessionData[0] as AttendanceSession;
+      console.log('Session ID:', session.id);
+
+      // Students fetch
+      const { data: students, error: studentError } = await supabase
+        .from('student')
+        .select('*')
+        .eq('year', teacher.year);
+      console.log('Students found:', students?.length);
+      console.log('Student fetch error:', studentError);
+
+      // Absent records
+      const absentRecords = (students || []).map((s) => ({
+        session_id: session.id,
+        student_id: s.id,
+        status: 'absent' as const,
+      }));
+      console.log('Absent records to insert:', absentRecords.length);
+
+      if (absentRecords.length > 0) {
+        const { error: absentError } = await supabase
+          .from('attendance_record')
+          .insert(absentRecords);
+        console.log('Absent insert error:', absentError);
+      }
+
+      // Store update
+      setStudentCount(students?.length || 0);
+      setActiveSession(session);
+      console.log('=== SESSION OPENED SUCCESSFULLY ===');
+      setSuccess(`Session opened! PIN: ${pin}`);
+
     } catch (err: any) {
+      console.log('CAUGHT ERROR:', err.message);
       setError(err.message || 'Failed to open session');
     } finally {
       setLoading(false);
     }
   };
 
-  // ── CHANGE 2: handleCloseSession — sync before close ─────────────────────
-  // Pehle wala directly close kar deta tha.
-  // Problem: Weak WiFi students ke records AsyncStorage mein pending the.
-  // Close hone ke baad wo records FOREVER lost ho jaate — koi sync nahi hota.
-  // Fix: Pending check karo, confirm lo, phir sync karo, phir close karo.
   const handleCloseSession = async () => {
     if (!activeSession) return;
     const currentPending = await getPendingCount();
@@ -188,6 +209,7 @@ export default function SessionScreen() {
         .from('attendance_session')
         .update({ is_active: false, closed_at: new Date().toISOString() })
         .eq('id', activeSession!.id);
+
       if (updateError) throw updateError;
 
       setActiveSession(null);
@@ -201,7 +223,7 @@ export default function SessionScreen() {
       setLoading(false);
     }
   };
-  // ─────────────────────────────────────────────────────────────────────────
+ 
 
   return (
     <View style={styles.container}>

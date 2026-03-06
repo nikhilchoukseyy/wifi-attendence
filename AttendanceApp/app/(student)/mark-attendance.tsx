@@ -78,7 +78,7 @@ export default function MarkAttendanceScreen() {
     setRefreshing(false);
   };
 
-  // ── STEP A: Validate PIN → go to face step ───────────────────────────────
+
   const handlePinSubmit = () => {
     if (!activeSession) return;
     if (!pin || pin.length !== 4) { setError('PIN must be 4 digits'); return; }
@@ -88,10 +88,9 @@ export default function MarkAttendanceScreen() {
       return;
     }
     setFaceError('');
-    setStep('face'); // ← switches to full screen camera
+    setStep('face');
   };
 
-  // ── STEP B: Face captured → verify embedding ─────────────────────────────
   const handleFaceVerified = async (capturedPhotoUri: string) => {
     setFaceVerifying(true);
     setFaceError('');
@@ -127,7 +126,7 @@ export default function MarkAttendanceScreen() {
     }
   };
 
-  // ── STEP C: WiFi check → DB insert ───────────────────────────────────────
+
   const markAttendanceInDB = async () => {
     setLoading(true);
     try {
@@ -139,14 +138,20 @@ export default function MarkAttendanceScreen() {
 
       const { data: existing } = await supabase
         .from('attendance_record')
-        .select('id')
+        .select('id, status')
         .eq('session_id', activeSession!.id)
         .eq('student_id', student.id)
-        .single();
+        .maybeSingle();
 
-      if (existing) {
-        setMarkedMessage('✓ You have already marked attendance for this session.');
-        setStep('done');
+      console.log('Existing record:', existing);
+
+
+      if (existing?.status === 'present') {
+
+        setError('✓ You have already marked attendance for this session.');
+        setFaceVerifying(false);
+        setLoading(false);
+        setStep('pin');
         return;
       }
 
@@ -160,10 +165,12 @@ export default function MarkAttendanceScreen() {
             marked_at: new Date().toISOString(),
             is_manual_edit: false,
             face_verified: true,
+            sync_status: 'synced',
           },
           { onConflict: 'session_id,student_id' }
         );
 
+      console.log('insertError', insertError);
       if (insertError) throw insertError;
 
       setSuccess('✓ Attendance marked successfully!');
@@ -178,10 +185,7 @@ export default function MarkAttendanceScreen() {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FACE STEP — rendered as full screen, completely outside ScrollView
-  // WHY: ScrollView cuts off flex:1 children. Full screen = no clipping.
-  // ─────────────────────────────────────────────────────────────────────────
+
   if (step === 'face' && activeSession) {
     return (
       <View style={styles.fullScreenContainer}>
@@ -248,9 +252,7 @@ export default function MarkAttendanceScreen() {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PIN + DONE steps — normal ScrollView layout
-  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -358,7 +360,7 @@ export default function MarkAttendanceScreen() {
   );
 }
 
-// ── StepIndicator (PIN step only) ─────────────────────────────────────────────
+
 function StepIndicator({ currentStep }: { currentStep: 1 | 2 }) {
   return (
     <View style={indicatorStyles.wrapper}>
@@ -394,7 +396,7 @@ const indicatorStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  // ── Normal layout ──
+
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
   infoCard: { marginBottom: 16, backgroundColor: '#e3f2fd' },
@@ -420,11 +422,10 @@ const styles = StyleSheet.create({
   successText: { textAlign: 'center', color: '#388e3c', marginBottom: 20, lineHeight: 20 },
   button: { marginTop: 16 },
 
-  // ── Full screen face step ──
-  // completely separate layout — no ScrollView, no padding wrappers
+
   fullScreenContainer: {
-    flex: 1,                      // takes entire screen
-    backgroundColor: '#0a0a0a',   // dark background matching FaceCamera
+    flex: 1,
+    backgroundColor: '#0a0a0a',
   },
   faceHeader: {
     flexDirection: 'row',
@@ -459,12 +460,12 @@ const styles = StyleSheet.create({
   stepLabelDone: { fontSize: 11, color: '#4caf50' },
   stepLabelActive: { fontSize: 11, color: '#1976d2', fontWeight: 'bold' },
 
-  // FaceCamera wrapper — flex:1 works here because parent is plain View
+
   cameraFlex: {
-    flex: 1,                      // ← this is the key fix
+    flex: 1,
   },
 
-  // Verifying spinner overlay
+
   verifyingOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
@@ -478,7 +479,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
-  // Error bar at bottom
+
   faceErrorBar: {
     backgroundColor: '#1a0a0a',
     padding: 16,

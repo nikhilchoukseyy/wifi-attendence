@@ -5,8 +5,7 @@ import { AttendanceRecord } from '../types';
 
 const PENDING_PREFIX = 'pending_att_';
 
-// STEP 1: Save attendance record locally (instant, no network needed)
-// Call this right after all security checks pass
+
 export const saveAttendanceLocally = async (
   record: AttendanceRecord
 ): Promise<void> => {
@@ -14,7 +13,7 @@ export const saveAttendanceLocally = async (
   await AsyncStorage.setItem(key, JSON.stringify(record));
 };
 
-// STEP 2: Sync all pending records to Supabase (call when network available)
+
 export const syncPendingRecords = async (): Promise<void> => {
   const allKeys = await AsyncStorage.getAllKeys();
   const pendingKeys = allKeys.filter(k => k.startsWith(PENDING_PREFIX));
@@ -40,9 +39,9 @@ export const syncPendingRecords = async (): Promise<void> => {
         });
 
       if (!error) {
-        await AsyncStorage.removeItem(key); // clean up after successful sync
+        await AsyncStorage.removeItem(key);
       } else {
-        // Mark as failed for retry
+        
         const updated = { ...record, sync_status: 'failed' as const };
         await AsyncStorage.setItem(key, JSON.stringify(updated));
       }
@@ -52,19 +51,18 @@ export const syncPendingRecords = async (): Promise<void> => {
   }
 };
 
-// Get count of pending (not yet synced) records
+
 export const getPendingCount = async (): Promise<number> => {
   const allKeys = await AsyncStorage.getAllKeys();
   return allKeys.filter(k => k.startsWith(PENDING_PREFIX)).length;
 };
 
-// Setup auto-sync listener — call in app _layout.tsx
-// Triggers syncPendingRecords whenever network becomes available
+
 export const setupAutoSync = (): (() => void) => {
   const unsubscribe = NetInfo.addEventListener(state => {
     if (state.isConnected && state.isInternetReachable) {
       syncPendingRecords();
     }
   });
-  return unsubscribe; // return unsubscribe function for cleanup
+  return unsubscribe; 
 };

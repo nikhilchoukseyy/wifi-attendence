@@ -56,19 +56,19 @@ export default function MyAttendanceScreen() {
           )
         `
         )
-        .eq('student_id', student.id)
-        .order('attendance_session.date', { ascending: false });
+        .eq('student_id', student.id);
 
       if (recordError) throw recordError;
 
       const formattedRecords: AttendanceDetail[] = (recordData || []).map((record: any) => ({
         session_id: record.session_id,
-        date: record.attendance_session.date,
+        date: record.attendance_session.date|| '',
         subject: record.attendance_session.subject,
         teacher_name: record.attendance_session.teacher?.name || 'Unknown',
         status: record.status,
         marked_at: record.marked_at,
-      }));
+      }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       setRecords(formattedRecords);
 
