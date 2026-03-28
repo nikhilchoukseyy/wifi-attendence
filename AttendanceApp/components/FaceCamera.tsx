@@ -145,8 +145,8 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,          // full screen width
     backgroundColor: '#0a0a0a',
     alignItems: 'center',
-    paddingVertical: 24,
-    paddingBottom: 32,
+    paddingVertical: 12,
+    paddingBottom: 8,
   },
   instructionBox: {
     backgroundColor: '#1e3a5f',
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   // Camera wrapper — explicit height, not flex
   cameraWrapper: {
     width: SCREEN_WIDTH - 40,     // full width minus padding
-    height: SCREEN_HEIGHT * 0.45, // 45% of screen height — visible on all devices
+    height: SCREEN_HEIGHT * 0.38, // 45% of screen height — visible on all devices
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 2,

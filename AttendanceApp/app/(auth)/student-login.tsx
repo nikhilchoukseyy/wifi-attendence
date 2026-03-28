@@ -361,6 +361,7 @@ const styles = StyleSheet.create({
   },
   cameraBody: {
     flex: 1,
+    paddingBottom:80,
   },
   cameraFooter: {
     backgroundColor: '#1a1a1a',

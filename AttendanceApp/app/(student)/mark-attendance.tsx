@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { useNavigation } from 'expo-router';
 import {
   Button,
   Text,
@@ -37,6 +38,16 @@ export default function MarkAttendanceScreen() {
     const interval = setInterval(checkForActiveSession, 30000);
     return () => clearInterval(interval);
   }, [student?.id]);
+
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    if (step === 'face') {
+      navigation.getParent()?.setOptions({ tabBarStyle: { display: 'none' } });
+    } else {
+      navigation.getParent()?.setOptions({ tabBarStyle: undefined });
+    }
+  }, [step]);
 
   if (!student) {
     return (
@@ -412,7 +423,7 @@ const styles = StyleSheet.create({
   successTitle: { marginBottom: 8, textAlign: 'center', fontWeight: 'bold', color: '#2e7d32' },
   successText: { textAlign: 'center', color: '#388e3c', marginBottom: 20, lineHeight: 20 },
   button: { marginTop: 16 },
-  fullScreenContainer: { flex: 1, backgroundColor: '#0a0a0a' },
+  fullScreenContainer: { flex: 1, backgroundColor: '#0a0a0a' ,},
   faceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingTop: 12, paddingBottom: 8 },
   faceHeaderTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   faceStepRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 32, marginBottom: 4 },
