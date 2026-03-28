@@ -142,10 +142,10 @@ export default function ManageTeachersScreen() {
               style={styles.picker}
               dropdownIconColor="#333"
             >
-              <Picker.Item label="Year 1" value={1} color="#333" />
-              <Picker.Item label="Year 2" value={2} color="#333" />
-              <Picker.Item label="Year 3" value={3} color="#333" />
-              <Picker.Item label="Year 4" value={4} color="#333" />
+              <Picker.Item label="Year 1" value={1} color="#fff" />
+              <Picker.Item label="Year 2" value={2} color="#fff" />
+              <Picker.Item label="Year 3" value={3} color="#fff" />
+              <Picker.Item label="Year 4" value={4} color="#fff" />
             </Picker>
           </View>
 
@@ -257,6 +257,9 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderRadius: 4,
     marginBottom: 12,
+  },
+  picker:{
+    color:'#333'
   },
   button: {
     marginTop: 12,

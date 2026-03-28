@@ -55,7 +55,7 @@ export default function MyAttendanceScreen() {
             teacher: teacher_id (name)
           )
         `
-        )
+        ).order('marked_at', { ascending: true })
         .eq('student_id', student.id);
 
       if (recordError) throw recordError;
