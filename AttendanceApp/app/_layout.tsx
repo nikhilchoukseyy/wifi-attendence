@@ -8,7 +8,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '../store/authStore';
 import { NetworkOfflineBanner } from '../components/NetworkOfflineBanner';
 import { setupAutoSync } from '../lib/offlineSync';
-import { initFaceModel } from '../lib/faceAuth';
 
 export default function RootLayout() {
   const { user } = useAuthStore();
@@ -18,7 +17,6 @@ export default function RootLayout() {
 
   useEffect(() => {
     setMounted(true);
-    initFaceModel().catch(console.warn);
     const unsubscribe = setupAutoSync();
     return () => unsubscribe();
   }, []);

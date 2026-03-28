@@ -27,7 +27,6 @@ export interface Student {
   is_device_bound: boolean;
   face_image_url: string | null;
   face_registered: boolean;
-  face_embedding: number[] | null;
   created_at: string;
 }
 

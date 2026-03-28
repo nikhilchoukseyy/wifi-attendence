@@ -12,9 +12,9 @@ import * as Network from 'expo-network';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { extractSubnet } from '../../lib/utils';
-import { getFaceEmbedding, loadFaceEmbedding, isSamePerson } from '../../lib/faceAuth';
 import FaceCamera from '../../components/FaceCamera';
 import { AttendanceSession, Student } from '../../types';
+import { verifyFaceWithBackend } from '../../lib/faceApi';
 
 export default function MarkAttendanceScreen() {
   const { user } = useAuthStore();
@@ -78,7 +78,6 @@ export default function MarkAttendanceScreen() {
     setRefreshing(false);
   };
 
-
   const handlePinSubmit = () => {
     if (!activeSession) return;
     if (!pin || pin.length !== 4) { setError('PIN must be 4 digits'); return; }
@@ -91,51 +90,65 @@ export default function MarkAttendanceScreen() {
     setStep('face');
   };
 
+  // ✅ FIXED: Fresh signed URL + Face++ verification
   const handleFaceVerified = async (capturedPhotoUri: string) => {
     setFaceVerifying(true);
     setFaceError('');
+
     try {
-      const liveEmbedding = await getFaceEmbedding(capturedPhotoUri);
+      // Step 1: face_registered check karo
+      const { data, error } = await supabase
+        .from('student')
+        .select('face_registered')
+        .eq('id', student.id)
+        .single();
 
-      let storedEmbedding = await loadFaceEmbedding(student.id);
+      if (error) throw error;
 
-      if (!storedEmbedding) {
-        const { data } = await supabase
-          .from('student')
-          .select('face_embedding')
-          .eq('id', student.id)
-          .single();
-        if (data?.face_embedding) {
-          storedEmbedding = JSON.parse(data.face_embedding);
-        }
-      }
-
-      if (!storedEmbedding) {
+      if (!data?.face_registered) {
         throw new Error('Face not registered. Please contact your HOD.');
       }
 
-      const matched = isSamePerson(storedEmbedding, liveEmbedding);
-      if (!matched) {
-        throw new Error('Face does not match. Try in better lighting and look directly at camera.');
+      // Step 2: Fresh signed URL generate karo (10 min valid)
+      // Stored URL kabhi expire ho jaata hai — isliye hamesha fresh URL lo
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from('face-photos')
+        .createSignedUrl(`${student.id}/reference.jpg`, 600);
+
+      if (signedError || !signedData?.signedUrl) {
+        throw new Error('Could not load reference photo. Try again.');
       }
 
+      // Step 3: Face++ se verify karo
+      const matched = await verifyFaceWithBackend(
+        capturedPhotoUri,
+        signedData.signedUrl  // ✅ fresh URL, never expired
+      );
+
+      if (!matched) {
+        throw new Error('Face does not match. Try in better lighting.');
+      }
+
+      // Step 4: Attendance mark karo
       await markAttendanceInDB();
+
     } catch (err: any) {
       setFaceError(err.message || 'Face verification failed.');
       setFaceVerifying(false);
     }
   };
 
-
   const markAttendanceInDB = async () => {
     setLoading(true);
     try {
+      // WiFi subnet check
       const ipAddress = await Network.getIpAddressAsync();
       const studentSubnet = extractSubnet(ipAddress);
       if (studentSubnet !== activeSession!.router_subnet) {
         throw new Error('You must be connected to the classroom WiFi network.');
       }
 
+      // Already marked check
       const { data: existing } = await supabase
         .from('attendance_record')
         .select('id, status')
@@ -143,11 +156,7 @@ export default function MarkAttendanceScreen() {
         .eq('student_id', student.id)
         .maybeSingle();
 
-      console.log('Existing record:', existing);
-
-
       if (existing?.status === 'present') {
-
         setError('✓ You have already marked attendance for this session.');
         setFaceVerifying(false);
         setLoading(false);
@@ -155,6 +164,7 @@ export default function MarkAttendanceScreen() {
         return;
       }
 
+      // Attendance record insert
       const { error: insertError } = await supabase
         .from('attendance_record')
         .upsert(
@@ -170,7 +180,6 @@ export default function MarkAttendanceScreen() {
           { onConflict: 'session_id,student_id' }
         );
 
-      console.log('insertError', insertError);
       if (insertError) throw insertError;
 
       setSuccess('✓ Attendance marked successfully!');
@@ -185,12 +194,9 @@ export default function MarkAttendanceScreen() {
     }
   };
 
-
   if (step === 'face' && activeSession) {
     return (
       <View style={styles.fullScreenContainer}>
-
-        {/* Header bar — step indicator + back button */}
         <View style={styles.faceHeader}>
           <Button
             mode="text"
@@ -200,10 +206,9 @@ export default function MarkAttendanceScreen() {
             ← Back
           </Button>
           <Text style={styles.faceHeaderTitle}>📸 Face Verification</Text>
-          <View style={{ width: 70 }} />{/* spacer to center title */}
+          <View style={{ width: 70 }} />
         </View>
 
-        {/* Step indicator */}
         <View style={styles.faceStepRow}>
           <View style={[styles.stepDot, styles.stepDotDone]} />
           <View style={[styles.stepLine, styles.stepLineDone]} />
@@ -214,10 +219,6 @@ export default function MarkAttendanceScreen() {
           <Text style={styles.stepLabelActive}>2. Verify Face</Text>
         </View>
 
-        {/*
-          FaceCamera takes ALL remaining space via flex:1
-          This works because parent is a plain View, NOT ScrollView
-        */}
         <View style={styles.cameraFlex}>
           <FaceCamera
             instruction="Look directly at the camera, then tap capture"
@@ -226,7 +227,6 @@ export default function MarkAttendanceScreen() {
           />
         </View>
 
-        {/* Verifying overlay */}
         {faceVerifying && (
           <View style={styles.verifyingOverlay}>
             <ActivityIndicator size="large" color="#fff" />
@@ -234,7 +234,6 @@ export default function MarkAttendanceScreen() {
           </View>
         )}
 
-        {/* Error bar at bottom */}
         {faceError ? (
           <View style={styles.faceErrorBar}>
             <Text style={styles.faceErrorText}>❌ {faceError}</Text>
@@ -247,11 +246,9 @@ export default function MarkAttendanceScreen() {
             </Button>
           </View>
         ) : null}
-
       </View>
     );
   }
-
 
   return (
     <View style={styles.container}>
@@ -259,7 +256,6 @@ export default function MarkAttendanceScreen() {
         style={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Student info card */}
         <Card style={styles.infoCard}>
           <Card.Content>
             <Text variant="labelSmall" style={styles.label}>Logged in as</Text>
@@ -268,7 +264,6 @@ export default function MarkAttendanceScreen() {
           </Card.Content>
         </Card>
 
-        {/* No session */}
         {!activeSession && step !== 'done' && (
           <Card style={styles.emptyCard}>
             <Card.Content style={styles.emptyContent}>
@@ -284,7 +279,6 @@ export default function MarkAttendanceScreen() {
           </Card>
         )}
 
-        {/* PIN step */}
         {activeSession && step === 'pin' && (
           <View style={styles.formContainer}>
             <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -331,7 +325,6 @@ export default function MarkAttendanceScreen() {
           </View>
         )}
 
-        {/* Success */}
         {step === 'done' && (
           <Card style={styles.successCard}>
             <Card.Content style={styles.successContent}>
@@ -359,7 +352,6 @@ export default function MarkAttendanceScreen() {
     </View>
   );
 }
-
 
 function StepIndicator({ currentStep }: { currentStep: 1 | 2 }) {
   return (
@@ -396,7 +388,6 @@ const indicatorStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 16 },
   infoCard: { marginBottom: 16, backgroundColor: '#e3f2fd' },
@@ -421,75 +412,21 @@ const styles = StyleSheet.create({
   successTitle: { marginBottom: 8, textAlign: 'center', fontWeight: 'bold', color: '#2e7d32' },
   successText: { textAlign: 'center', color: '#388e3c', marginBottom: 20, lineHeight: 20 },
   button: { marginTop: 16 },
-
-
-  fullScreenContainer: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  faceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  faceHeaderTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  faceStepRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    marginBottom: 4,
-  },
+  fullScreenContainer: { flex: 1, backgroundColor: '#0a0a0a' },
+  faceHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingTop: 12, paddingBottom: 8 },
+  faceHeaderTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  faceStepRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 32, marginBottom: 4 },
   stepDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#555' },
   stepDotActive: { backgroundColor: '#1976d2' },
   stepDotDone: { backgroundColor: '#4caf50' },
   stepLine: { flex: 1, height: 2, backgroundColor: '#555', marginHorizontal: 6 },
   stepLineDone: { backgroundColor: '#4caf50' },
-  faceStepLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 28,
-    marginBottom: 8,
-  },
+  faceStepLabels: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 28, marginBottom: 8 },
   stepLabelDone: { fontSize: 11, color: '#4caf50' },
   stepLabelActive: { fontSize: 11, color: '#1976d2', fontWeight: 'bold' },
-
-
-  cameraFlex: {
-    flex: 1,
-  },
-
-
-  verifyingOverlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verifyingText: {
-    color: '#fff',
-    marginTop: 12,
-    fontSize: 16,
-  },
-
-
-  faceErrorBar: {
-    backgroundColor: '#1a0a0a',
-    padding: 16,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#c62828',
-  },
-  faceErrorText: {
-    color: '#ef9a9a',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  cameraFlex: { flex: 1 },
+  verifyingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
+  verifyingText: { color: '#fff', marginTop: 12, fontSize: 16 },
+  faceErrorBar: { backgroundColor: '#1a0a0a', padding: 16, alignItems: 'center', borderTopWidth: 1, borderTopColor: '#c62828' },
+  faceErrorText: { color: '#ef9a9a', textAlign: 'center', lineHeight: 20 },
 });

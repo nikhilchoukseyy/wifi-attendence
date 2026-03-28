@@ -162,9 +162,9 @@ export default function ManageStudentsScreen() {
         return;
       }
 
-      // HOD photo choose kare — square crop forced (face ke liye best)
+      
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'Images' as any,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 1,
@@ -291,11 +291,13 @@ export default function ManageStudentsScreen() {
               selectedValue={year}
               onValueChange={(value) => setYear(value)}
               enabled={!loading}
+              style={styles.picker}
+              dropdownIconColor="#333"
             >
-              <Picker.Item label="Year 1" value={1} />
-              <Picker.Item label="Year 2" value={2} />
-              <Picker.Item label="Year 3" value={3} />
-              <Picker.Item label="Year 4" value={4} />
+              <Picker.Item label="Year 1" value={1} color="#fff" />   
+              <Picker.Item label="Year 2" value={2} color="#fff" />
+              <Picker.Item label="Year 3" value={3} color="#fff" />
+              <Picker.Item label="Year 4" value={4} color="#fff" />
             </Picker>
           </View>
 
@@ -310,8 +312,7 @@ export default function ManageStudentsScreen() {
 
         <Divider style={styles.divider} />
 
-        {/* ── PHOTO SUMMARY BANNER ── */}
-        {/* Kyun: HOD ko ek nazar mein dikhna chahiye ki kitne students ki photo pending hai */}
+        
         {students.length > 0 && (
           <View style={styles.photoBanner}>
             <View style={styles.photoStat}>
@@ -473,6 +474,9 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderRadius: 4,
     marginBottom: 12,
+  },
+  picker:{
+    color:'#333'
   },
   button: {
     marginTop: 12,

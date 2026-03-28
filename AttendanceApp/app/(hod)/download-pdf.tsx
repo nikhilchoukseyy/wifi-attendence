@@ -151,12 +151,16 @@ export default function DownloadPDFScreen() {
               selectedValue={selectedTeacher}
               onValueChange={setSelectedTeacher}
               enabled={!loading}
+              style={styles.picker}
+              dropdownIconColor="#333"
             >
               {teachers.map((teacher) => (
                 <Picker.Item
                   key={teacher.id}
                   label={`${teacher.subject} - ${teacher.name}`}
                   value={teacher.id}
+                  color="#333"
+                  
                 />
               ))}
             </Picker>

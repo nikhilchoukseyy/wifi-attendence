@@ -139,11 +139,13 @@ export default function ManageTeachersScreen() {
               selectedValue={year}
               onValueChange={(value) => setYear(value)}
               enabled={!loading}
+              style={styles.picker}
+              dropdownIconColor="#333"
             >
-              <Picker.Item label="Year 1" value={1} />
-              <Picker.Item label="Year 2" value={2} />
-              <Picker.Item label="Year 3" value={3} />
-              <Picker.Item label="Year 4" value={4} />
+              <Picker.Item label="Year 1" value={1} color="#333" />
+              <Picker.Item label="Year 2" value={2} color="#333" />
+              <Picker.Item label="Year 3" value={3} color="#333" />
+              <Picker.Item label="Year 4" value={4} color="#333" />
             </Picker>
           </View>
 
